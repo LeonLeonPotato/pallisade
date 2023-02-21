@@ -4,7 +4,7 @@ import concurrent.futures
 from hyperparameters import *
 from mcts import *
 
-_FLAT = 7 * 7 * 1
+_FLAT = 7 * 7
 
 class ResidualLayer(nn.Module):
     def __init__(self) -> None:
@@ -27,19 +27,34 @@ class ResidualLayer(nn.Module):
 class PolicyHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.fc1 = nn.Linear()
+        self.conv = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=1, stride=1)
+        self.norm = nn.BatchNorm2d(1)
+        self.fc = nn.Linear(_FLAT, _FLAT)
     
     def forward(self, x):
-        return self.fc(x)
+        x = self.conv(x)
+        x = self.norm(x)
+        x = F.leaky_relu(x)
+        x = self.fc(x)
+        return x
 
 class ValueHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
+        self.conv = nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1)
+        self.norm = nn.BatchNorm1d(1)
         self.fc1 = nn.Linear(_FLAT, 32)
-        self.fc2 = nn.Linear(_FLAT, 32)
+        self.fc2 = nn.Linear(32, 1)
     
     def forward(self, x):
-        return self.fc(x)
+        x = self.conv(x)
+        x = self.norm(x)
+        x = F.leaky_relu(x)
+        x = self.fc1(x)
+        x = F.leaky_relu(x)
+        x = self.fc2(x)
+        x = F.tanh(x)
+        return x
 
 class Network(nn.Module):
     def __init__(self) -> None:
@@ -52,7 +67,7 @@ class Network(nn.Module):
     
     def forward(self, x, view=True): # x is shape (Batch, 1, N, M)
         tmp:torch.Tensor = self.trunk(x)
-        tmp = tmp.flatten(start_dim=1, end_dim=-1)
+        tmp = tmp.flatten(start_dim=2, end_dim=-1)
         pol = self.policy(tmp)
         val = self.value(tmp)
         
