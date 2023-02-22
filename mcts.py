@@ -89,7 +89,7 @@ def search(net, root:Node):
         res = check_win(root.state)
         if res != 0:
             if res != 2:
-                root.backprop(-root.turn)
+                root.backprop(1)
             else:
                 root.backprop(0)
             break
