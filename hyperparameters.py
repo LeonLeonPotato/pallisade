@@ -5,13 +5,13 @@ import sys
 _init = False
 
 batch_size = 4
-learning_rate = 0.001
-workers = 12
+learning_rate = 0.01
+workers = 16
 
 mcts_multinomial = True
 mcts_top_p = 0.5
 mcts_cpuct_param = 2.0
-mcts_searches = 49 * 2
+mcts_searches = 49
 
 device = None
 colab_env = None

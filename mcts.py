@@ -47,7 +47,7 @@ class Node():
                 child_prior, q_vals = network(inp)
 
             for i in range(len(self.children)):
-                self.children[i].children_P = child_prior[i]
+                self.children[i].children_P = child_prior[i].softmax(dim=-1)
                 self.children[i].Q = q_vals[i].item()
                 self.backprop(new_node.Q)
     
@@ -66,9 +66,11 @@ class Node():
 
     def uct(self):
         if (self.parent == None):
-            return self.P / (1 + self.visits)
+            v = 1 + self.visits
+        else:
+            v = self.parent.visits
     
-        u = self.P * math.sqrt(self.parent.visits) / (1 + self.visits)
+        u = self.P * v / (1 + self.visits)
         q = self.Q / max(1, self.W)
         return q + u
     
@@ -80,7 +82,7 @@ def prep_empty_board(network):
     node = Node(board, None, -1)
     with torch.no_grad():
         priors, value = network(torch.tensor(board, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0))
-        node.children_P = priors[0]
+        node.children_P = priors[0].softmax(dim=-1)
         node.Q = value[0].item()
     return node, board
 
@@ -88,7 +90,7 @@ def search(net, root:Node):
     while True:
         res = check_win(root.state)
         if res != 2:
-            root.backprop(abs(res))
+            root.backprop(-abs(res))
             break
         root.expand(net)
         root = root.pick_best_move()

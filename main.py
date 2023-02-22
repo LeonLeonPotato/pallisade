@@ -45,7 +45,8 @@ for i in range(1, 101):
         state_history.append(node.state * node.turn)
         posterior_history.append(node.children.index(best))
 
-        #print([f"{c.uct():.2f} {c.move}" for c in node.children])
+        #print([f"{c.Q:.2f} {c.move}" for c in node.children])
+        print([f"{c.Q:.2f}, {c.W:.2f}, {c.P:.2f} {c.move}" for c in node.children])
         node = best
         node.parent = None
         print("Top chosen UCT:", node.uct())
@@ -66,7 +67,7 @@ for i in range(1, 101):
     buff = DataBuffer(
         torch.from_numpy(np.array(state_history, dtype=np.float32)).unsqueeze(1),
         torch.tensor(posterior_history, dtype=torch.long),
-        res
+        vals
     )
 
     train(

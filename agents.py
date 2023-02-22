@@ -80,11 +80,11 @@ class Network(nn.Module):
         
         if view:
             pol = pol.reshape((-1, 7, 7))
-            pol[x[:, -1, :, :] != 0] = 0
+            pol[x[:, -1, :, :] != 0] = float("-inf")
         else:
             pol = pol.squeeze(1)
             ex = x[:, -1, :, :].flatten(start_dim=1, end_dim=-1)
-            pol[ex != 0] = 0
+            pol[ex != 0] = float("-inf")
 
         return pol, val.flatten()
 
