@@ -25,26 +25,30 @@ class Node():
         self.parent = parent
         self.state = state
         self.turn = turn # self = turn, children = -turn
-        self.debug = None
+        self.move = None
     
     def expand(self, network):
         if self.leaf:
             # prior, value = network(self.state)
             self.leaf = False
+            batched = []
             for x, y in get_possible_actions(self.state):
                 tmp = self.state.copy()
                 new_node = Node(tmp, self, -self.turn) # create new node
                 new_node.state[x, y] = new_node.turn # apply action
-                new_node.debug = [x, y]
+                new_node.move = [x, y]
 
-                inp = torch.tensor(self.state * new_node.turn, dtype=torch.float32, device=device)
-                with torch.no_grad():
-                    child_prior, new_node.Q = network(inp)
-                new_node.Q = new_node.Q[0].item()
-                
-                new_node.children_P = child_prior
+                batched.append(torch.tensor(new_node.state * new_node.turn, dtype=torch.float32, device=device).unsqueeze(0))
                 new_node.P = self.children_P[x, y].item()
                 self.children.append(new_node)
+
+            with torch.no_grad():
+                inp = torch.stack(batched)
+                child_prior, q_vals = network(inp)
+
+            for i in len(self.children):
+                self.children[i].children_P = child_prior[i]
+                self.children[i].Q = q_vals[i].item()
                 self.backprop(new_node.Q)
     
     def pick_best_move(self):
@@ -55,7 +59,7 @@ class Node():
         current = self
         while True:
             current.W += 1
-            current.Q += value * current.turn
+            current.Q += value * -current.turn
             current = current.parent
             if current == None:
                 break
@@ -77,7 +81,7 @@ def prep_empty_board(network):
     with torch.no_grad():
         priors, value = network(torch.tensor(board, dtype=torch.float32, device=device))
     node.children_P = priors
-    node.Q = value[0]
+    node.Q = value.item()
     return node, board
 
 def search(net, root:Node):
@@ -85,7 +89,7 @@ def search(net, root:Node):
         res = check_win(root.state)
         if res != 0:
             if res != 2:
-                root.backprop(root.turn)
+                root.backprop(-root.turn)
             else:
                 root.backprop(0)
             break

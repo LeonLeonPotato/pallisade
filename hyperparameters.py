@@ -6,6 +6,7 @@ _init = False
 
 batch_size = 4
 learning_rate = 0.001
+workers = 12
 
 mcts_multinomial = True
 mcts_top_p = 0.5

@@ -1,18 +1,20 @@
 import torch.nn as nn
 import concurrent.futures
+from collections import deque
+import threading
 
 from hyperparameters import *
 from mcts import *
 
-_FLAT = 7 * 7
+_FLAT = 7 * 7 * 8
 
 class ResidualLayer(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=3, stride=1, padding=1)
-        self.norm = nn.BatchNorm2d(1)
-        self.norm2 = nn.BatchNorm2d(1)
+        self.conv = nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.BatchNorm2d(8)
+        self.norm2 = nn.BatchNorm2d(8)
     
     def forward(self, x):
         tmp = self.conv(x)
@@ -59,6 +61,8 @@ class ValueHead(nn.Module):
 class Network(nn.Module):
     def __init__(self) -> None:
         super().__init__()
+        self.conv = nn.Conv2d(in_channels=1, out_channels=8, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.BatchNorm2d(8)
         self.trunk = nn.Sequential(
             *[ResidualLayer() for i in range(4)]
         )
@@ -66,10 +70,12 @@ class Network(nn.Module):
         self.value = ValueHead()
     
     def forward(self, x, view=True): # x is shape (Batch, 1, N, M)
-        tmp:torch.Tensor = self.trunk(x)
-        tmp = tmp.flatten(start_dim=2, end_dim=-1)
-        pol = self.policy(tmp)
-        val = self.value(tmp)
+        tmp = self.conv(x)
+        tmp = self.norm(tmp)  # tmp is shape (Batch, 8, N, M)
+        tmp = self.trunk(tmp) # tmp is shape (Batch, 8, N, M)
+        tmp = tmp.flatten(start_dim=1, end_dim=-1).unsqueeze(1) # tmp is shape (Batch, 1, N * M * 8)
+        pol = self.policy(tmp) # tmp is shape (Batch, 49)
+        val = self.value(tmp) # tmp is shape (Batch, 1)
         
         if view:
             pol = pol.view(7, 7)
@@ -79,9 +85,27 @@ class Network(nn.Module):
 
         return pol, val
 
+# class Manager():
+#     def __init__(self, network) -> None:
+#         self.locks = [threading.Lock() for i in range(workers)]
+#         self.outs = [0 for i in range(workers)]
+#         self.tasks = deque()
+#         self.network = network
+
+#     def submit(self, task, id):
+#         self.tasks.append(task)
+#         self.locks[id]
+        
+        
+#     def start_loop(self):
+#         while True:
+
+
+
 class Agent():
     def __init__(self, network : Network) -> None:
         self.network = network
+        
 
     def predict(self, root : Node):
         root.expand(self.network)
