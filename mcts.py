@@ -46,7 +46,7 @@ class Node():
                 inp = torch.stack(batched)
                 child_prior, q_vals = network(inp)
 
-            for i in len(self.children):
+            for i in range(len(self.children)):
                 self.children[i].children_P = child_prior[i]
                 self.children[i].Q = q_vals[i].item()
                 self.backprop(new_node.Q)
@@ -79,19 +79,16 @@ def prep_empty_board(network):
     board = np.zeros((7, 7), dtype=int)
     node = Node(board, None, -1)
     with torch.no_grad():
-        priors, value = network(torch.tensor(board, dtype=torch.float32, device=device))
-    node.children_P = priors
-    node.Q = value.item()
+        priors, value = network(torch.tensor(board, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0))
+        node.children_P = priors[0]
+        node.Q = value[0].item()
     return node, board
 
 def search(net, root:Node):
     while True:
         res = check_win(root.state)
-        if res != 0:
-            if res != 2:
-                root.backprop(1)
-            else:
-                root.backprop(0)
+        if res != 2:
+            root.backprop(abs(res))
             break
         root.expand(net)
         root = root.pick_best_move()

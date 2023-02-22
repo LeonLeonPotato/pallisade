@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 def get_possible_actions(state : np.ndarray):
     # actions = []
@@ -33,8 +34,6 @@ def check_win2(board):
         return 2
     return 0
 
-import numpy as np
-
 def check_win(board):
     """
     Takes in a 7x7 numpy array with elements {-1, 0, 1} and returns the winner
@@ -64,8 +63,15 @@ def check_win(board):
 
     # Check if the game is still going on
     if np.any(board == 0):
-        return 0
+        return 2
 
     # If no winner and no empty cells, it's a draw
-    return 2
+    return 0
 
+def alternating_tensor(length, N):
+    tensor = torch.zeros(length, dtype=torch.float32)
+    start_value = 1 if N == -1 else -1
+    for i in range(length):
+        tensor[i] = start_value
+        start_value *= -1
+    return tensor

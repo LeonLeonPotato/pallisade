@@ -6,6 +6,7 @@ import threading
 from hyperparameters import *
 from mcts import *
 
+_HISTORY = 1
 _FLAT = 7 * 7 * 8
 
 class ResidualLayer(nn.Module):
@@ -29,9 +30,9 @@ class ResidualLayer(nn.Module):
 class PolicyHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=1, stride=1)
-        self.norm = nn.BatchNorm2d(1)
-        self.fc = nn.Linear(_FLAT, _FLAT)
+        self.conv = nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1)
+        self.norm = nn.BatchNorm1d(1)
+        self.fc = nn.Linear(_FLAT, 49)
     
     def forward(self, x):
         x = self.conv(x)
@@ -55,13 +56,13 @@ class ValueHead(nn.Module):
         x = self.fc1(x)
         x = F.leaky_relu(x)
         x = self.fc2(x)
-        x = F.tanh(x)
+        x = torch.tanh(x)
         return x
 
 class Network(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.Conv2d(in_channels=1, out_channels=8, kernel_size=3, stride=1, padding=1)
+        self.conv = nn.Conv2d(in_channels=_HISTORY, out_channels=8, kernel_size=3, stride=1, padding=1)
         self.norm = nn.BatchNorm2d(8)
         self.trunk = nn.Sequential(
             *[ResidualLayer() for i in range(4)]
@@ -69,21 +70,23 @@ class Network(nn.Module):
         self.policy = PolicyHead()
         self.value = ValueHead()
     
-    def forward(self, x, view=True): # x is shape (Batch, 1, N, M)
+    def forward(self, x, view=True): # x is shape (Batch, _HISTORY, N, M)
         tmp = self.conv(x)
         tmp = self.norm(tmp)  # tmp is shape (Batch, 8, N, M)
         tmp = self.trunk(tmp) # tmp is shape (Batch, 8, N, M)
         tmp = tmp.flatten(start_dim=1, end_dim=-1).unsqueeze(1) # tmp is shape (Batch, 1, N * M * 8)
-        pol = self.policy(tmp) # tmp is shape (Batch, 49)
+        pol:torch.Tensor = self.policy(tmp) # tmp is shape (Batch, 49)
         val = self.value(tmp) # tmp is shape (Batch, 1)
         
         if view:
-            pol = pol.view(7, 7)
-            pol[x != 0] = 0
+            pol = pol.reshape((-1, 7, 7))
+            pol[x[:, -1, :, :] != 0] = 0
         else:
-            pol[x.flatten() != 0] = 0
+            pol = pol.squeeze(1)
+            ex = x[:, -1, :, :].flatten(start_dim=1, end_dim=-1)
+            pol[ex != 0] = 0
 
-        return pol, val
+        return pol, val.flatten()
 
 # class Manager():
 #     def __init__(self, network) -> None:

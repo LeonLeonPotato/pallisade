@@ -20,13 +20,13 @@ class DataBuffer(Dataset):
     def __getitem__(self, index):
         return self.states[index].to(device=device), self.mcts[index].to(device=device), self.val[index].to(device=device)
     
-def train(data:DataLoader, network, criterion, optimizer):
+def train(data:DataLoader, network, criterion_p, criterion_v, optimizer):
     for state, p, v in data:
         prior, val = network(state, view=False)
         
         optimizer.zero_grad()
-        loss_prior = criterion(prior, p)
-        loss_val = criterion(val, v.to(dtype=torch.long))
+        loss_prior = criterion_p(prior, p)
+        loss_val = criterion_v(val, v)
         loss = loss_prior + loss_val
         print(loss.item())
         loss.backward()

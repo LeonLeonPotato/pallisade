@@ -11,7 +11,7 @@ workers = 12
 mcts_multinomial = True
 mcts_top_p = 0.5
 mcts_cpuct_param = 2.0
-mcts_searches = 49
+mcts_searches = 49 * 2
 
 device = None
 colab_env = None

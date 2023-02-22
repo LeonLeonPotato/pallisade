@@ -19,7 +19,8 @@ from utils import *
 
 net = Network().to(device=device)
 optimizer = optim.Adam(params=net.parameters())
-criterion = nn.CrossEntropyLoss()
+criterion_p = nn.CrossEntropyLoss()
+criterion_v = nn.MSELoss()
 
 agent1 = Agent(net)
 agent2 = Agent(net)
@@ -44,28 +45,35 @@ for i in range(1, 101):
         state_history.append(node.state * node.turn)
         posterior_history.append(node.children.index(best))
 
-        print([f"{c.uct():.2f} {c.debug}" for c in node.children])
+        #print([f"{c.uct():.2f} {c.move}" for c in node.children])
         node = best
-        print(node.uct())
-        print("turn", node.turn)
-        print(node.state)
+        node.parent = None
+        print("Top chosen UCT:", node.uct())
+        print("Turn:", node.turn)
         print("Won:", check_win(node.state))
+        print(node.state)
         print("==============")
         
         res = check_win(node.state)
-        if res != 0:
+        if res != 2:
             break
     
+    if res == 0:
+        vals = torch.zeros(len(state_history), dtype=torch.float32)
+    else:
+        vals = alternating_tensor(len(state_history), res)
+
     buff = DataBuffer(
-        torch.from_numpy(np.array(state_history, dtype=np.float32)),
-        torch.tensor(posterior_history),
-        torch.fill(torch.zeros(len(state_history), dtype=torch.int), [0, 0, 2, 1][res])
+        torch.from_numpy(np.array(state_history, dtype=np.float32)).unsqueeze(1),
+        torch.tensor(posterior_history, dtype=torch.long),
+        res
     )
 
     train(
         DataLoader(buff, batch_size=batch_size, shuffle=True), 
         net, 
-        criterion,
+        criterion_p,
+        criterion_v,
         optimizer    
     )
 
