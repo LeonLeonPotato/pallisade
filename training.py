@@ -21,13 +21,20 @@ class DataBuffer(Dataset):
         return self.states[index].to(device=device), self.mcts[index].to(device=device), self.val[index].to(device=device)
     
 def train(data:DataLoader, network, criterion_p, criterion_v, optimizer):
-    for state, p, v in data:
-        prior, val = network(state, view=False)
-        
-        optimizer.zero_grad()
-        loss_prior = criterion_p(prior, p)
-        loss_val = criterion_v(val, v)
-        loss = loss_prior + loss_val
-        print(loss.item())
-        loss.backward()
-        optimizer.step()
+    print(" Training ".center(50, "="))
+    for i in range(epochs_per_dataset):
+        av = 0
+        times = 0
+        for state, p, v in data:
+            prior, val = network(state.unsqueeze(1), view=False)
+            
+            optimizer.zero_grad()
+            loss_prior = criterion_p(prior, p)
+            loss_val = criterion_v(val, v)
+            loss = loss_prior + loss_val
+            av += loss.item()
+            times += 1
+            loss.backward()
+            optimizer.step()
+        print(f"Training epoch {i} average loss: {av / times:.3f}")
+    print(" Collecting Data ".center(50, "="))

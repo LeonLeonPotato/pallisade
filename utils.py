@@ -1,5 +1,5 @@
 import numpy as np
-import torch
+import os
 
 def get_possible_actions(state : np.ndarray):
     # actions = []
@@ -69,9 +69,13 @@ def check_win(board):
     return 0
 
 def alternating_tensor(length, N):
-    tensor = np.zeros(length, dtype=int)
+    tensor = np.zeros(length, dtype=np.float32)
     start_value = N * -1
     for i in range(length):
         tensor[i] = start_value
         start_value *= -1
     return tensor
+
+def make_if_doesnt_exist(path):
+    if not os.path.exists(path):
+        os.mkdir(path)

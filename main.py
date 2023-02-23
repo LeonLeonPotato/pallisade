@@ -7,7 +7,6 @@ if "mac" in platform.platform():
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import torch.multiprocessing as mp
 
@@ -18,9 +17,7 @@ from agents import *
 from utils import *
 
 if __name__ == "__main__":
-    if not os.path.exists("datasets"):
-        os.mkdir("datasets")
-    
+    make_if_doesnt_exist("datasets")
     mp.set_start_method("spawn")
 
     net = Network().to(device=device).share_memory()
@@ -31,10 +28,20 @@ if __name__ == "__main__":
 
     for epoch in range(1, epochs + 1):
         plist = []
+
+        epoch_path = os.path.join("datasets", f"dataset-{str(epoch)}")
+        make_if_doesnt_exist(epoch_path)
+        epoch_states = os.path.join(epoch_path, "state")
+        make_if_doesnt_exist(epoch_states)
+        epoch_post = os.path.join(epoch_path, "post")
+        make_if_doesnt_exist(epoch_post)
+        epoch_vals = os.path.join(epoch_path, "val")
+        make_if_doesnt_exist(epoch_vals)
+
         for w in range(workers):
             proc = mp.Process(
                 target=run_game, 
-                args=(net, w, epoch)
+                args=(net, w, epoch_states, epoch_post, epoch_vals)
             )
             proc.start()
             plist.append(proc)
@@ -42,13 +49,40 @@ if __name__ == "__main__":
         for p in plist:
             p.join()
 
-        epoch_path = os.path.join("dataset", str(epoch))
+        states = None
+        post = None
+        vals = None
 
-        data = np.empty(0)
+        for file in os.listdir(epoch_states):
+            with open(os.path.join(epoch_states, file), "rb") as f:
+                nparr = torch.from_numpy(np.load(f))
+                if states == None:
+                    states = nparr
+                else:
+                    states = torch.concat((states, nparr))
+        for file in os.listdir(epoch_post):
+            with open(os.path.join(epoch_post, file), "rb") as f:
+                nparr = torch.from_numpy(np.load(f))
+                if post == None:
+                    post = nparr
+                else:
+                    post = torch.concat((post, nparr))
+        for file in os.listdir(epoch_vals):
+            with open(os.path.join(epoch_vals, file), "rb") as f:
+                nparr = torch.from_numpy(np.load(f))
+                if vals == None:
+                    vals = nparr
+                else:
+                    vals = torch.concat((vals, nparr))
 
-        for file in os.listdir(epoch_path):
-            with open(os.path.join(epoch_path, file), "rb") as f:
-                torch.concat((data, np.load(f)))
+        loader = DataLoader(
+            DataBuffer(states, post, vals),
+            batch_size=batch_size,
+            shuffle=True
+        )
+
+        train(loader, net, criterion_p, criterion_v, optimizer)
+        
 
         
     

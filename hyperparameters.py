@@ -7,13 +7,13 @@ epochs = 100
 epochs_per_dataset = 20
 self_play_games = 10
 batch_size = 16
-learning_rate = 0.005
-workers = 16
+learning_rate = 0.01
+workers = 8
 
 mcts_stochastic = True
 mcts_top_p = 0.5
 mcts_cpuct_param = 2.0
-mcts_searches = 49
+mcts_searches = 1
 
 device = None
 colab_env = None
