@@ -1,10 +1,9 @@
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
+import numpy as np
 
-inp = torch.randn(10).unsqueeze(0).unsqueeze(0)
-print(inp)
+s = np.array([1, 5, 3, 2, 4])
 
-conv = nn.Conv1d(1, 1, 1, 1)
-print(conv.weight, conv.bias)
-print(conv(inp))
+with open("temp", "wb") as f:
+    np.save(f, s)
+
+with open("temp", "rb") as f:
+    print(type(np.load(f)))

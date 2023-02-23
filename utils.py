@@ -69,8 +69,8 @@ def check_win(board):
     return 0
 
 def alternating_tensor(length, N):
-    tensor = torch.zeros(length, dtype=torch.float32)
-    start_value = 1 if N == -1 else -1
+    tensor = np.zeros(length, dtype=int)
+    start_value = N * -1
     for i in range(length):
         tensor[i] = start_value
         start_value *= -1

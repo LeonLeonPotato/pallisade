@@ -84,7 +84,7 @@ def prep_empty_board(network):
         priors, value = network(torch.tensor(board, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0))
         node.children_P = priors[0].softmax(dim=-1)
         node.Q = value[0].item()
-    return node, board
+    return node
 
 def search(net, root:Node):
     while True:

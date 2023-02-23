@@ -1,7 +1,4 @@
 import torch.nn as nn
-import concurrent.futures
-from collections import deque
-import threading
 
 from hyperparameters import *
 from mcts import *
@@ -65,7 +62,7 @@ class Network(nn.Module):
         self.conv = nn.Conv2d(in_channels=_HISTORY, out_channels=8, kernel_size=3, stride=1, padding=1)
         self.norm = nn.BatchNorm2d(8)
         self.trunk = nn.Sequential(
-            *[ResidualLayer() for i in range(4)]
+            *[ResidualLayer() for i in range(8)]
         )
         self.policy = PolicyHead()
         self.value = ValueHead()
@@ -75,16 +72,16 @@ class Network(nn.Module):
         tmp = self.norm(tmp)  # tmp is shape (Batch, 8, N, M)
         tmp = self.trunk(tmp) # tmp is shape (Batch, 8, N, M)
         tmp = tmp.flatten(start_dim=1, end_dim=-1).unsqueeze(1) # tmp is shape (Batch, 1, N * M * 8)
-        pol:torch.Tensor = self.policy(tmp) # tmp is shape (Batch, 49)
+        pol = self.policy(tmp) # tmp is shape (Batch, 49)
         val = self.value(tmp) # tmp is shape (Batch, 1)
         
         if view:
             pol = pol.reshape((-1, 7, 7))
-            pol[x[:, -1, :, :] != 0] = float("-inf")
+            pol[x[:, -1, :, :] != 0] = 0
         else:
             pol = pol.squeeze(1)
             ex = x[:, -1, :, :].flatten(start_dim=1, end_dim=-1)
-            pol[ex != 0] = float("-inf")
+            pol[ex != 0] = 0
 
         return pol, val.flatten()
 
@@ -104,24 +101,15 @@ class Network(nn.Module):
 #         while True:
 
 
+def predict(network, root : Node):
+    root.expand(network)
+    l = len(root.children)
 
-class Agent():
-    def __init__(self, network : Network) -> None:
-        self.network = network
-        
+    for s in range(mcts_searches):
+        search(network, root.children[s % l])
 
-    def predict(self, root : Node):
-        root.expand(self.network)
-        l = len(root.children)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-            futures = []
-            for s in range(mcts_searches):
-                futures.append(executor.submit(search, self.network, root.children[s % l]))
-            concurrent.futures.wait(futures)
-
-        probs = torch.tensor([u.uct() for u in root.children]).softmax(dim=-1).numpy()
-        indicies = np.random.multinomial(1, probs).argmax()
-        best = root.children[probs.argmax().item()]
-        picked = root.children[indicies.item()]
-        return best, picked
+    probs = torch.tensor([u.uct() for u in root.children]).softmax(dim=-1).numpy()
+    indicies = np.random.multinomial(1, probs).argmax()
+    best = root.children[probs.argmax().item()]
+    picked = root.children[indicies.item()]
+    return best, picked
