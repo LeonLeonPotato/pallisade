@@ -3,16 +3,19 @@ import torch.nn as nn
 from hyperparameters import *
 from mcts import *
 
+# Model parameters, not really "hyperparams"
+_LAYERS = 5
+_FILTERS = 64
 _HISTORY = 1
 _FLAT = 7 * 7 * 8
 
 class ResidualLayer(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=8, kernel_size=3, stride=1, padding=1)
-        self.norm = nn.BatchNorm2d(8)
-        self.norm2 = nn.BatchNorm2d(8)
+        self.conv = nn.Conv2d(in_channels=_FILTERS, out_channels=_FILTERS, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=_FILTERS, out_channels=_FILTERS, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.BatchNorm2d(_FILTERS)
+        self.norm2 = nn.BatchNorm2d(_FILTERS)
     
     def forward(self, x):
         tmp = self.conv(x)
@@ -27,12 +30,13 @@ class ResidualLayer(nn.Module):
 class PolicyHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1)
+        self.w = torch.tensor([1.0], dtype=torch.float32, requires_grad=True)
+        self.b = torch.tensor([0.1], dtype=torch.float32, requires_grad=True)
         self.norm = nn.BatchNorm1d(1)
         self.fc = nn.Linear(_FLAT, 49)
     
     def forward(self, x):
-        x = self.conv(x)
+        x = x * self.w + self.b
         x = self.norm(x)
         x = F.leaky_relu(x)
         x = self.fc(x)
@@ -41,13 +45,14 @@ class PolicyHead(nn.Module):
 class ValueHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1)
+        self.w = torch.tensor([1.0], dtype=torch.float32, requires_grad=True)
+        self.b = torch.tensor([0.1], dtype=torch.float32, requires_grad=True)
         self.norm = nn.BatchNorm1d(1)
         self.fc1 = nn.Linear(_FLAT, 32)
         self.fc2 = nn.Linear(32, 1)
     
     def forward(self, x):
-        x = self.conv(x)
+        x = x * self.w + self.b
         x = self.norm(x)
         x = F.leaky_relu(x)
         x = self.fc1(x)
@@ -59,19 +64,19 @@ class ValueHead(nn.Module):
 class Network(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = nn.Conv2d(in_channels=_HISTORY, out_channels=8, kernel_size=3, stride=1, padding=1)
-        self.norm = nn.BatchNorm2d(8)
+        self.conv = nn.Conv2d(in_channels=_HISTORY, out_channels=_FILTERS, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.BatchNorm2d(_FILTERS)
         self.trunk = nn.Sequential(
-            *[ResidualLayer() for i in range(8)]
+            *[ResidualLayer() for i in range(_LAYERS)]
         )
         self.policy = PolicyHead()
         self.value = ValueHead()
     
     def forward(self, x, view=True): # x is shape (Batch, _HISTORY, N, M)
         tmp = self.conv(x)
-        tmp = self.norm(tmp)  # tmp is shape (Batch, 8, N, M)
-        tmp = self.trunk(tmp) # tmp is shape (Batch, 8, N, M)
-        tmp = tmp.flatten(start_dim=1, end_dim=-1).unsqueeze(1) # tmp is shape (Batch, 1, N * M * 8)
+        tmp = self.norm(tmp)  # tmp is shape (Batch, _FILTERS, N, M)
+        tmp = self.trunk(tmp) # tmp is shape (Batch, _FILTERS, N, M)
+        tmp = tmp.flatten(start_dim=1, end_dim=-1).unsqueeze(1) # tmp is shape (Batch, 1, N * M * _FILTERS)
         pol = self.policy(tmp) # tmp is shape (Batch, 49)
         val = self.value(tmp) # tmp is shape (Batch, 1)
         

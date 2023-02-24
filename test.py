@@ -1,9 +1,9 @@
 import numpy as np
 
-s = np.array([1, 5, 3, 2, 4])
+turn = -1
+val = np.load("data-0")
 
-with open("temp", "wb") as f:
-    np.save(f, s)
-
-with open("temp", "rb") as f:
-    print(type(np.load(f)))
+for i in val:
+    print(i * turn + 1 - 1)
+    turn *= -1
+    print("")

@@ -1,14 +1,8 @@
 import numpy as np
+import torch
 import os
 
 def get_possible_actions(state : np.ndarray):
-    # actions = []
-    # for x in range(0, 3):
-    #     for y in range(0, 3):
-    #         if state[x, y] == 0:
-    #             actions.append((x, y))
-    # return actions
-
     return np.array(np.where(state == 0)).T
 
 def check_win2(board):
@@ -69,7 +63,7 @@ def check_win(board):
     return 0
 
 def alternating_tensor(length, N):
-    tensor = np.zeros(length, dtype=np.float32)
+    tensor = [0]
     start_value = N * -1
     for i in range(length):
         tensor[i] = start_value
@@ -79,3 +73,26 @@ def alternating_tensor(length, N):
 def make_if_doesnt_exist(path):
     if not os.path.exists(path):
         os.mkdir(path)
+
+def prep_files_epoch(epoch):
+    epoch_path = os.path.join("datasets", f"dataset-{str(epoch)}")
+    make_if_doesnt_exist(epoch_path)
+
+    epoch_states = os.path.join(epoch_path, "state")
+    make_if_doesnt_exist(epoch_states)
+
+    epoch_post = os.path.join(epoch_path, "post")
+    make_if_doesnt_exist(epoch_post)
+
+    epoch_vals = os.path.join(epoch_path, "val")
+    make_if_doesnt_exist(epoch_vals)
+
+    return epoch_path, epoch_states, epoch_post, epoch_vals
+
+def read_all_data(path):
+    arr = []
+    for file in os.listdir(path):
+        with open(os.path.join(path, file), "rb") as f:
+            nparr = torch.from_numpy(np.load(f))
+            arr.append(nparr)
+    return torch.cat(arr)

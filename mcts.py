@@ -13,6 +13,8 @@ import torch.nn.functional as F
 from hyperparameters import *
 from utils import *
 
+np.random.dirichlet()
+
 class Node():
     def __init__(self, state, parent, turn) -> None:
         self.leaf = True

@@ -29,20 +29,11 @@ def run_game(network, worker_id, epoch_state, epoch_post, epoch_val):
             res = check_win(node.state)
             if res != 2:
                 break
-        
-        if res == 0:
-            tmp = np.zeros(his, dtype=np.float32)
-        else:
-            tmp = alternating_tensor(his, res)
-        vals = np.concatenate((vals, tmp), dtype=np.float32)
+
+        vals.extend([res * -((i % 2) * 2 - 1) for i in range(1, his+1)])
 
         print("Worker {0} finished game {1} | winner: {2} | history: {3}"
               .format(worker_id, g, res, his))
-
-    # print(his)
-    # print(vals.shape)
-    # print(posterior_history.shape)
-    # print(state_history.shape)
 
     epoch_state = os.path.join(epoch_state, f"data-{worker_id}")
     epoch_post = os.path.join(epoch_post, f"data-{worker_id}")
@@ -53,4 +44,24 @@ def run_game(network, worker_id, epoch_state, epoch_post, epoch_val):
     with open(epoch_post, "wb") as f:
         np.save(f, np.array(posterior_history, dtype=np.longlong))
     with open(epoch_val, "wb") as f:
-        np.save(f, vals)
+        np.save(f, np.array(vals))
+
+def save_model(network:nn.Module, epoch, optim:nn.Module):
+    if not os.path.exists("checkpoints"):
+        os.mkdir("checkpoints")
+
+    d = {
+        "epoch" : epoch,
+        "network": network.state_dict(),
+        "optimizer": optim.state_dict()
+    }
+
+    torch.save(d, os.path.join("checkpoints", f"save-{epoch}"))
+
+def get_last_checkpoint():
+    if not os.path.exists("checkpoints"):
+        os.mkdir("checkpoints")
+        return None
+    
+    f = max(os.listdir("checkpoints"), key=lambda u: int(u.split('-')[-1]))
+    return torch.load(os.path.join("checkpoints", f)), os.path.join("checkpoints", f)
