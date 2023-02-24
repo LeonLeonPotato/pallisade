@@ -7,7 +7,7 @@ from mcts import *
 _LAYERS = 5
 _FILTERS = 64
 _HISTORY = 1
-_FLAT = 7 * 7 * 8
+_FLAT = 7 * 7 * 64
 
 class ResidualLayer(nn.Module):
     def __init__(self) -> None:
@@ -30,8 +30,10 @@ class ResidualLayer(nn.Module):
 class PolicyHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.w = torch.tensor([1.0], dtype=torch.float32, requires_grad=True)
-        self.b = torch.tensor([0.1], dtype=torch.float32, requires_grad=True)
+        self.w = nn.Parameter(torch.tensor([1.0], dtype=torch.float32).to(device=device), requires_grad=True)
+        self.b = nn.Parameter(torch.tensor([0.1], dtype=torch.float32).to(device=device), requires_grad=True)
+        self.register_parameter("policy_wc", self.w)
+        self.register_parameter("policy_bc", self.b)
         self.norm = nn.BatchNorm1d(1)
         self.fc = nn.Linear(_FLAT, 49)
     
@@ -45,8 +47,10 @@ class PolicyHead(nn.Module):
 class ValueHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.w = torch.tensor([1.0], dtype=torch.float32, requires_grad=True)
-        self.b = torch.tensor([0.1], dtype=torch.float32, requires_grad=True)
+        self.w = nn.Parameter(torch.tensor([1.0], dtype=torch.float32).to(device=device), requires_grad=True)
+        self.b = nn.Parameter(torch.tensor([0.1], dtype=torch.float32).to(device=device), requires_grad=True)
+        self.register_parameter("value_wc", self.w)
+        self.register_parameter("value_bc", self.b)
         self.norm = nn.BatchNorm1d(1)
         self.fc1 = nn.Linear(_FLAT, 32)
         self.fc2 = nn.Linear(32, 1)

@@ -61,7 +61,9 @@ def save_model(network:nn.Module, epoch, optim:nn.Module):
 def get_last_checkpoint():
     if not os.path.exists("checkpoints"):
         os.mkdir("checkpoints")
-        return None
+        return None, None
+    if len(os.listdir("checkpoints")) == 0:
+        return None, None
     
     f = max(os.listdir("checkpoints"), key=lambda u: int(u.split('-')[-1]))
     return torch.load(os.path.join("checkpoints", f)), os.path.join("checkpoints", f)

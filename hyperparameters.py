@@ -10,7 +10,7 @@ batch_size = 16
 learning_rate = 0.003
 workers = 4
 
-mcts_stochastic = False
+mcts_dirichlet = 0.25
 mcts_top_p = 0.5
 mcts_cpuct_param = 2.0
 mcts_searches = 49

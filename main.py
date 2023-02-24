@@ -26,6 +26,7 @@ if __name__ == "__main__":
     criterion_v = nn.MSELoss()
 
     last_check, name = get_last_checkpoint()
+    start_epoch = 0
     if last_check != None:
         print("Loading checkpoint at path", name)
         net.load_state_dict(last_check["network"])
