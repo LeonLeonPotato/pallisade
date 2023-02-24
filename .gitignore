@@ -131,3 +131,4 @@ dmypy.json
 Archive.zip
 test.py
 data*
+.DS_Store
