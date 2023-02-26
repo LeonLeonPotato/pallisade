@@ -27,7 +27,7 @@ class Node():
         self.turn = turn # self = turn, children = -turn
         self.move = None
     
-    def expand(self, network):
+    def expand(self, cache):
         if self.leaf:
             # prior, value = network(self.state)
             self.leaf = False
@@ -38,18 +38,24 @@ class Node():
                 new_node.state[x, y] = new_node.turn # apply action
                 new_node.move = [x, y]
 
-                batched.append(torch.tensor(new_node.state * new_node.turn, dtype=torch.float32, device=device).unsqueeze(0))
+                batched.append(torch.tensor(new_node.state * new_node.turn, dtype=torch.float32).unsqueeze(0))
                 new_node.P = self.children_P[x, y].item()
                 self.children.append(new_node)
 
-            with torch.no_grad():
-                inp = torch.stack(batched)
-                child_prior, q_vals = network(inp)
+            inp = torch.stack(batched)
+            start, end, i = cache.submit(inp)
+            cache.locks[i].acquire()
+            child_prior, q_vals = cache.out[0][start:end], cache.out[1][start:end]
+            # print(child_prior.shape)
+            if len(child_prior) == 0:
+                print(cache.out[0].shape, start, end)
+            cache.locks[i].release()
 
             for i in range(len(self.children)):
                 self.children[i].children_P = child_prior[i].softmax(dim=-1)
                 self.children[i].Q = q_vals[i].item()
-                self.backprop(new_node.Q)
+                self.backprop(self.children[i].Q)
+
     
     def pick_best_move(self):
         max_child = max(self.children, key=lambda k: k.uct())
@@ -86,12 +92,17 @@ def prep_empty_board(network):
         node.Q = value[0].item()
     return node
 
-def search(net, root:Node):
+def search(root:Node, cache):
+    cur = time.time()
+    his = 0
     while True:
         res = check_win(root.state)
         if res != 2:
-            root.backprop(-abs(res))
+            root.backprop(-root.turn)
             break
-        root.expand(net)
+        root.expand(cache)
+        print(len(root.children))
         root = root.pick_best_move()
         root.visits += 1
+        his += 1
+    print(f"Eval time: {time.time() - cur}, his={his}, av = {(time.time() - cur) / his}")

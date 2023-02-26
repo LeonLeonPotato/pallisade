@@ -3,11 +3,58 @@ import torch.nn as nn
 from hyperparameters import *
 from mcts import *
 
+from concurrent import futures
+from threading import Lock, Thread
+
 # Model parameters, not really "hyperparams"
 _LAYERS = 5
 _FILTERS = 64
 _HISTORY = 1
 _FLAT = 7 * 7 * 64
+
+class GPUCache():
+    def __init__(self, model) -> None:
+        self.last = time.time()
+        self.sumbitted = 0
+        self.cur_lock = 0
+        self.tasks = []
+        self.locks = [Lock() for i in range(max_tasks)]
+        for i in self.locks: 
+            i.acquire()
+        self.out = None
+        self.model = model
+        self.finished = False
+
+    def run(self):
+        while True:
+            time.sleep(0.05)
+            if self.sumbitted >= max_tasks or (time.time() - self.last >= tasks_timeout and self.sumbitted > 0):
+                self.flush()
+            if self.finished:
+                break
+
+    def submit(self, task):
+        # print(f"Submitted task at length {len(task)}")
+        self.tasks.append(task)
+        start = self.sumbitted
+        self.sumbitted += len(task)
+        self.cur_lock += 1
+        return start, self.sumbitted, self.cur_lock - 1
+    
+    @torch.no_grad()
+    def flush(self):
+        # print(f"Flushing with size of {len(self.tasks)}")
+        self.cur_lock = 0
+        self.sumbitted = 0
+        self.last = time.time()
+        inp = torch.cat(self.tasks).to(device="cuda")
+        self.out = self.model(inp)
+        for lock in self.locks:
+            lock.release()
+        for lock in self.locks:
+            lock.acquire()
+        self.tasks.clear()
+        # print("Out size =", len(self.out[0]))
 
 class ResidualLayer(nn.Module):
     def __init__(self) -> None:
@@ -75,6 +122,7 @@ class Network(nn.Module):
         )
         self.policy = PolicyHead()
         self.value = ValueHead()
+        self.diri = torch.distributions.dirichlet.Dirichlet(torch.tensor([mcts_dirichlet_val] * 7 * 7))
     
     def forward(self, x, view=True): # x is shape (Batch, _HISTORY, N, M)
         tmp = self.conv(x)
@@ -83,6 +131,11 @@ class Network(nn.Module):
         tmp = tmp.flatten(start_dim=1, end_dim=-1).unsqueeze(1) # tmp is shape (Batch, 1, N * M * _FILTERS)
         pol = self.policy(tmp) # tmp is shape (Batch, 49)
         val = self.value(tmp) # tmp is shape (Batch, 1)
+
+        if not self.training:
+            diri = self.diri.sample_n(x.shape[0]).to(device=device)
+            diri = diri.view(x.shape[0], 1, 49)
+            pol = (1 - mcts_dirichlet) * pol + mcts_dirichlet * diri
         
         if view:
             pol = pol.reshape((-1, 7, 7))
@@ -94,31 +147,33 @@ class Network(nn.Module):
 
         return pol, val.flatten()
 
-# class Manager():
-#     def __init__(self, network) -> None:
-#         self.locks = [threading.Lock() for i in range(workers)]
-#         self.outs = [0 for i in range(workers)]
-#         self.tasks = deque()
-#         self.network = network
-
-#     def submit(self, task, id):
-#         self.tasks.append(task)
-#         self.locks[id]
-        
-        
-#     def start_loop(self):
-#         while True:
-
-
 def predict(network, root : Node):
-    root.expand(network)
-    l = len(root.children)
+    cache = GPUCache(network)
+    a = Thread(target=cache.run)
+    a.start()
 
-    for s in range(mcts_searches):
-        search(network, root.children[s % l])
+    root.expand(cache)
+    print("childs", len(root.children))
+    print(root.children_P)
 
-    probs = torch.tensor([u.uct() for u in root.children]).softmax(dim=-1).numpy()
-    indicies = np.random.multinomial(1, probs).argmax()
-    best = root.children[probs.argmax().item()]
-    picked = root.children[indicies.item()]
-    return best, picked
+    plist = []
+    with futures.ThreadPoolExecutor(max_workers=12) as pool:
+        for s in range(mcts_searches):
+            plist.append(pool.submit(search, root, cache))
+
+    futures.as_completed(plist)
+    cache.finished = True
+    a.join()
+
+    for p in plist:
+        if p.exception():
+            import traceback
+            exc = p.exception()
+            traceback.print_exception(type(exc), exc, exc.__traceback__)
+            exit()
+    print(root.state)
+    print("root w", root.W)
+    
+    best = max(root.children, key=lambda x: x.uct())
+    del cache
+    return best
