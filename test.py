@@ -48,7 +48,7 @@ class Mod(nn.Module):
         x = self.policy(x)
         return x
     
-model = Mod()
+model = Mod().cuda()
 
 class Manager():
     def __init__(self) -> None:
@@ -74,10 +74,10 @@ class Manager():
             if self.exit:
                 break
             time.sleep(0.05)
-            if self.cur_task > 128 or (time.time() - self.last_shipped > 0.1 and self.cur_task > 0):
+            if self.cur_task > 100000 or (time.time() - self.last_shipped > 0.4 and self.cur_task > 0):
                 oooo = time.time()
                 self.append_lock.acquire()
-                inp = torch.cat(self.tasks)
+                inp = torch.cat(self.tasks).cuda()
                 out = model(inp)
                 cur = 0
                 for f, t in zip(self.futures, self.tasks):

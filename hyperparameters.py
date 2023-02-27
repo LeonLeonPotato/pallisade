@@ -7,8 +7,8 @@ epochs = 100
 epochs_per_dataset = 10
 self_play_games = 1
 batch_size = 16
-learning_rate = 0.003
-workers = 1
+learning_rate = 0.1
+workers = 4
 
 max_tasks = 256
 tasks_timeout = 0.1

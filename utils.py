@@ -1,4 +1,5 @@
 import numpy as np
+import traceback
 import torch
 import os
 
@@ -96,3 +97,6 @@ def read_all_data(path):
             nparr = torch.from_numpy(np.load(f))
             arr.append(nparr)
     return torch.cat(arr)
+
+def printstacktrace(exc):
+    traceback.print_exception(type(exc), exc, exc.__traceback__)

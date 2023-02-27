@@ -1,14 +1,7 @@
-import os
-import os.path as path
-import subprocess
 import time
-import sys
-import math
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from hyperparameters import *
 from utils import *
@@ -38,19 +31,13 @@ class Node():
                 new_node.state[x, y] = new_node.turn # apply action
                 new_node.move = [x, y]
 
-                batched.append(torch.tensor(new_node.state * new_node.turn, dtype=torch.float32).unsqueeze(0))
+                batched.append(torch.tensor(new_node.state * new_node.turn, dtype=torch.float32, device=device).unsqueeze(0))
                 new_node.P = self.children_P[x, y].item()
                 self.children.append(new_node)
 
             inp = torch.stack(batched)
-            start, end, i = cache.submit(inp)
-            cache.locks[i].acquire()
-            child_prior, q_vals = cache.out[0][start:end], cache.out[1][start:end]
-            # print(child_prior.shape)
-            if len(child_prior) == 0:
-                print(cache.out[0].shape, start, end)
-            cache.locks[i].release()
-
+            future = cache.submit(inp)
+            child_prior, q_vals = future.result()
             for i in range(len(self.children)):
                 self.children[i].children_P = child_prior[i].softmax(dim=-1)
                 self.children[i].Q = q_vals[i].item()
@@ -101,8 +88,6 @@ def search(root:Node, cache):
             root.backprop(-root.turn)
             break
         root.expand(cache)
-        print(len(root.children))
         root = root.pick_best_move()
         root.visits += 1
         his += 1
-    print(f"Eval time: {time.time() - cur}, his={his}, av = {(time.time() - cur) / his}")

@@ -1,9 +1,11 @@
 import torch.nn as nn
+import torch.nn.functional as F
 
 from hyperparameters import *
 from mcts import *
 
 from concurrent import futures
+from concurrent.futures import Future
 from threading import Lock, Thread
 
 # Model parameters, not really "hyperparams"
@@ -14,50 +16,45 @@ _FLAT = 7 * 7 * 64
 
 class GPUCache():
     def __init__(self, model) -> None:
-        self.last = time.time()
-        self.sumbitted = 0
-        self.cur_lock = 0
-        self.tasks = []
-        self.out = None
         self.model = model
-        self.finished = False
+        self.tasks = []
+        self.futures = []
+        self.cur_task = 0
+        self.append_lock = Lock()
+        self.last_shipped = time.time()
+        self.exit = False
 
-    def lock(self):
-        self.locks = [Lock() for i in range(max_tasks)]
-        for i in self.locks: 
-            i.acquire()
-
-    def run(self):
-        self.lock()
-        while True:
-            time.sleep(0.05)
-            if self.sumbitted >= max_tasks or (time.time() - self.last >= tasks_timeout and self.sumbitted > 0):
-                self.flush()
-            if self.finished:
-                break
-
-    def submit(self, task):
-        # print(f"Submitted task at length {len(task)}")
+    def submit(self, task) -> Future:
+        self.append_lock.acquire()
+        ret = Future()
+        self.futures.append(ret)
         self.tasks.append(task)
-        start = self.sumbitted
-        self.sumbitted += len(task)
-        self.cur_lock += 1
-        return start, self.sumbitted, self.cur_lock - 1
+        self.cur_task += len(task)
+        self.append_lock.release()
+        return ret
     
-    @torch.no_grad()
-    def flush(self):
-        # print(f"Flushing with size of {len(self.tasks)}")
-        self.cur_lock = 0
-        self.sumbitted = 0
-        self.last = time.time()
-        inp = torch.cat(self.tasks).to(device="cuda")
-        self.out = self.model(inp)
-        for lock in self.locks:
-            lock.release()
-        for lock in self.locks:
-            lock.acquire()
-        self.tasks.clear()
-        # print("Out size =", len(self.out[0]))
+    @torch.inference_mode()
+    def run(self):
+        while True:
+            if self.exit:
+                break
+            time.sleep(0.05)
+            self.append_lock.acquire()
+            if self.cur_task > 512 or (time.time() - self.last_shipped > 0.15 and self.cur_task > 0):
+                inp = torch.cat(self.tasks)
+                out = self.model(inp)
+                cur = 0
+                for f, t in zip(self.futures, self.tasks):
+                    prior = out[0][cur:cur+len(t)]
+                    val = out[1][cur:cur+len(t)]
+                    f.set_result((prior, val))
+                    cur += len(t)
+                self.futures.clear()
+                self.tasks.clear()
+                self.cur_task = 0
+                self.last_shipped = time.time()
+            self.append_lock.release()
+
 
 class ResidualLayer(nn.Module):
     def __init__(self) -> None:
@@ -80,35 +77,19 @@ class ResidualLayer(nn.Module):
 class PolicyHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.w = nn.Parameter(torch.tensor([1.0], dtype=torch.float32).to(device=device), requires_grad=True)
-        self.b = nn.Parameter(torch.tensor([0.1], dtype=torch.float32).to(device=device), requires_grad=True)
-        self.register_parameter("policy_wc", self.w)
-        self.register_parameter("policy_bc", self.b)
-        self.norm = nn.BatchNorm1d(1)
         self.fc = nn.Linear(_FLAT, 49)
     
     def forward(self, x):
-        x = x * self.w + self.b
-        x = self.norm(x)
-        x = F.leaky_relu(x)
         x = self.fc(x)
         return x
 
 class ValueHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.w = nn.Parameter(torch.tensor([1.0], dtype=torch.float32).to(device=device), requires_grad=True)
-        self.b = nn.Parameter(torch.tensor([0.1], dtype=torch.float32).to(device=device), requires_grad=True)
-        self.register_parameter("value_wc", self.w)
-        self.register_parameter("value_bc", self.b)
-        self.norm = nn.BatchNorm1d(1)
         self.fc1 = nn.Linear(_FLAT, 32)
         self.fc2 = nn.Linear(32, 1)
     
     def forward(self, x):
-        x = x * self.w + self.b
-        x = self.norm(x)
-        x = F.leaky_relu(x)
         x = self.fc1(x)
         x = F.leaky_relu(x)
         x = self.fc2(x)
@@ -136,7 +117,7 @@ class Network(nn.Module):
         val = self.value(tmp) # tmp is shape (Batch, 1)
 
         if not self.training:
-            diri = self.diri.sample_n(x.shape[0]).to(device=device)
+            diri = self.diri.sample((x.shape[0], )).to(device=device)
             diri = diri.view(x.shape[0], 1, 49)
             pol = (1 - mcts_dirichlet) * pol + mcts_dirichlet * diri
         
@@ -156,27 +137,19 @@ def predict(network, root : Node):
     cache_thread.start()
 
     root.expand(cache)
-    print("childs", len(root.children))
-    print(root.children_P)
+    childs = len(root.children)
 
     plist = []
-    with futures.ThreadPoolExecutor(max_workers=12) as pool:
+    with futures.ThreadPoolExecutor(max_workers=49) as pool:
         for s in range(mcts_searches):
-            plist.append(pool.submit(search, root, cache))
+            plist.append(pool.submit(search, root.children[s % childs], cache))
 
     futures.as_completed(plist)
-    cache.finished = True
+    cache.exit = True
     cache_thread.join()
-
-    for p in plist:
-        if p.exception():
-            import traceback
-            exc = p.exception()
-            traceback.print_exception(type(exc), exc, exc.__traceback__)
-            exit()
-    print(root.state)
-    print("root w", root.W)
     
     best = max(root.children, key=lambda x: x.uct())
     del cache
+
+    torch.cuda.empty_cache()
     return best

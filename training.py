@@ -19,7 +19,8 @@ class DataBuffer(Dataset):
     
     def __getitem__(self, index):
         return self.states[index].to(device=device), self.mcts[index].to(device=device), self.val[index].to(device=device)
-    
+
+@torch.inference_mode(mode=False)
 def train(data:DataLoader, network, criterion_p, criterion_v, optimizer):
     print(" Training ".center(50, "="))
     network.train()
@@ -36,6 +37,7 @@ def train(data:DataLoader, network, criterion_p, criterion_v, optimizer):
             loss = loss_prior + loss_val
             total_prior_loss += loss_prior.item()
             total_vals_loss += loss_val.item()
+            print(loss_val.item(), loss_prior.item(), val, prior)
             times += 1
             loss.backward()
             optimizer.step()
