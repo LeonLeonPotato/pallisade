@@ -18,14 +18,17 @@ class GPUCache():
         self.sumbitted = 0
         self.cur_lock = 0
         self.tasks = []
-        self.locks = [Lock() for i in range(max_tasks)]
-        for i in self.locks: 
-            i.acquire()
         self.out = None
         self.model = model
         self.finished = False
 
+    def lock(self):
+        self.locks = [Lock() for i in range(max_tasks)]
+        for i in self.locks: 
+            i.acquire()
+
     def run(self):
+        self.lock()
         while True:
             time.sleep(0.05)
             if self.sumbitted >= max_tasks or (time.time() - self.last >= tasks_timeout and self.sumbitted > 0):
@@ -149,8 +152,8 @@ class Network(nn.Module):
 
 def predict(network, root : Node):
     cache = GPUCache(network)
-    a = Thread(target=cache.run)
-    a.start()
+    cache_thread = Thread(target=cache.run)
+    cache_thread.start()
 
     root.expand(cache)
     print("childs", len(root.children))
@@ -163,7 +166,7 @@ def predict(network, root : Node):
 
     futures.as_completed(plist)
     cache.finished = True
-    a.join()
+    cache_thread.join()
 
     for p in plist:
         if p.exception():

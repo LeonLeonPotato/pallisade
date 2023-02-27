@@ -3,6 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 import matplotlib.pyplot as plt
+from threading import Thread, Lock
+from concurrent.futures import Future
+from concurrent.futures import ThreadPoolExecutor
+import random
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 _FILTERS = 128
 
@@ -31,39 +39,79 @@ class Mod(nn.Module):
             *[ResidualLayer() for i in range(4)]
         )
         self.conv = nn.Conv2d(1, _FILTERS, 3, 1, 1)
+        self.policy = nn.Linear(128 * 7 * 7, 7 * 7)
     
     def forward(self, x):
         x = self.conv(x)
         x = self.trunk(x)
+        x = torch.flatten(x, start_dim=1, end_dim=-1)
+        x = self.policy(x)
         return x
     
-test_mod = Mod().to(device="cuda").share_memory()
+model = Mod()
 
-test_batch = torch.randn((120, 1, 7, 7), device="cuda")
-test_mod(test_batch)
+class Manager():
+    def __init__(self) -> None:
+        self.tasks = []
+        self.futures = []
+        self.cur_task = 0
+        self.append_lock = Lock()
+        self.last_shipped = time.time()
+        self.exit = False
 
-x = []
-y = []
-tests = 100
-stride = 10
-
-@torch.no_grad()
-def test():
-    for t in range(10, tests * stride + 1, stride):
-        test_batch = torch.randn((t, 1, 7, 7), device="cuda")
-
-        cur = time.time()
-        sample = test_mod(test_batch)[0][0][0][0]
-        passed = time.time() - cur
+    def submit(self, task) -> Future:
+        self.append_lock.acquire()
+        ret = Future()
+        self.futures.append(ret)
+        self.tasks.append(task)
+        self.cur_task += len(task)
+        self.append_lock.release()
+        return ret
     
-        print(f"Test {t} | Sample: {sample:.2f} | Time: {passed} seconds")
+    @torch.inference_mode()
+    def run(self):
+        while True:
+            if self.exit:
+                break
+            time.sleep(0.05)
+            if self.cur_task > 128 or (time.time() - self.last_shipped > 0.1 and self.cur_task > 0):
+                oooo = time.time()
+                self.append_lock.acquire()
+                inp = torch.cat(self.tasks)
+                out = model(inp)
+                cur = 0
+                for f, t in zip(self.futures, self.tasks):
+                    f.set_result(out[cur:cur+len(t)])
+                    cur += len(t)
+                self.futures.clear()
+                self.tasks.clear()
+                print(f"Flushing with size of {self.cur_task}, {time.time() - self.last_shipped:.3f} seconds since last shipped.")
+                self.cur_task = 0
+                self.last_shipped = time.time()
+                self.append_lock.release()
+                print(time.time() - oooo)
 
-        x.append(t)
-        y.append(passed)
+manager = Manager()
+manager_thread = Thread(target=manager.run)
+manager_thread.start()
 
-        torch.cuda.empty_cache()
+def work():
+    try:
+        time.sleep(random.random() * 0.1)
+        batches = random.randint(20, 49)
+        task = torch.randn((batches, 1, 7, 7), dtype=torch.float32)
+        future = manager.submit(task)
+        if future.result().shape[0] != task.shape[0]:
+            print("Wrong shape!")
+            exit()
+    except Exception as f:
+        logger.exception(f)
+        exit()
 
-test()
+with ThreadPoolExecutor(max_workers=49) as pool:
+    for i in range(1000):
+        pool.submit(work)
 
-plt.plot(x, y, "P", color="red")
-plt.show()
+print("Finished")
+manager.exit = True
+manager_thread.join()

@@ -86,7 +86,7 @@ class Node():
 def prep_empty_board(network):
     board = np.zeros((7, 7), dtype=int)
     node = Node(board, None, -1)
-    with torch.no_grad():
+    with torch.inference_mode():
         priors, value = network(torch.tensor(board, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0))
         node.children_P = priors[0].softmax(dim=-1)
         node.Q = value[0].item()
