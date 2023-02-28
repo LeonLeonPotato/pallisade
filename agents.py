@@ -9,7 +9,7 @@ from concurrent.futures import Future
 from threading import Lock, Thread
 
 # Model parameters, not really "hyperparams"
-_LAYERS = 5
+_LAYERS = 8
 _FILTERS = 64
 _HISTORY = 1
 _FLAT = 7 * 7 * 64

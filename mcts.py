@@ -80,7 +80,6 @@ def prep_empty_board(network):
     return node
 
 def search(root:Node, cache):
-    cur = time.time()
     his = 0
     while True:
         res = check_win(root.state)
