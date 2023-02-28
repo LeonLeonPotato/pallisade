@@ -1,3 +1,4 @@
+import time
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -10,9 +11,9 @@ from threading import Lock, Thread
 
 # Model parameters, not really "hyperparams"
 _LAYERS = 8
-_FILTERS = 64
+_FILTERS = 8
 _HISTORY = 1
-_FLAT = 7 * 7 * 64
+_FLAT = 7 * 7 * _FILTERS
 
 class GPUCache():
     def __init__(self, model) -> None:
@@ -33,15 +34,15 @@ class GPUCache():
         self.append_lock.release()
         return ret
     
-    @torch.inference_mode()
+    @torch.no_grad()
     def run(self):
         while True:
             if self.exit:
                 break
             time.sleep(0.05)
             self.append_lock.acquire()
-            if self.cur_task > 512 or (time.time() - self.last_shipped > 0.15 and self.cur_task > 0):
-                inp = torch.cat(self.tasks)
+            if self.cur_task > max_tasks or (time.time() - self.last_shipped > 0.15 and self.cur_task > 0):
+                inp = torch.cat(self.tasks).to(device=device)
                 out = self.model(inp)
                 cur = 0
                 for f, t in zip(self.futures, self.tasks):
@@ -77,10 +78,14 @@ class ResidualLayer(nn.Module):
 class PolicyHead(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.fc = nn.Linear(_FLAT, 49)
+        self.fc1 = nn.Linear(_FLAT, 128)
+        self.fc2 = nn.Linear(128, 49)
     
     def forward(self, x):
-        x = self.fc(x)
+        x = self.fc1(x)
+        x = F.leaky_relu(x)
+        x = self.fc2(x)
+        x = x.reshape((-1, 7, 7))
         return x
 
 class ValueHead(nn.Module):
@@ -106,29 +111,21 @@ class Network(nn.Module):
         )
         self.policy = PolicyHead()
         self.value = ValueHead()
-        self.diri = torch.distributions.dirichlet.Dirichlet(torch.tensor([mcts_dirichlet_val] * 7 * 7))
     
     def forward(self, x, view=True): # x is shape (Batch, _HISTORY, N, M)
         tmp = self.conv(x)
         tmp = self.norm(tmp)  # tmp is shape (Batch, _FILTERS, N, M)
         tmp = self.trunk(tmp) # tmp is shape (Batch, _FILTERS, N, M)
-        tmp = tmp.flatten(start_dim=1, end_dim=-1).unsqueeze(1) # tmp is shape (Batch, 1, N * M * _FILTERS)
-        pol = self.policy(tmp) # tmp is shape (Batch, 49)
+        tmp = tmp.flatten(start_dim=1, end_dim=-1) # tmp is shape (Batch, N * M * _FILTERS)
+        pol = self.policy(tmp) # tmp is shape (Batch, 7, 7)
         val = self.value(tmp) # tmp is shape (Batch, 1)
 
-        if not self.training:
-            diri = self.diri.sample((x.shape[0], )).to(device=device)
-            diri = diri.view(x.shape[0], 1, 49)
-            pol = (1 - mcts_dirichlet) * pol + mcts_dirichlet * diri
-        
-        if view:
-            pol = pol.reshape((-1, 7, 7))
-            pol[x[:, -1, :, :] != 0] = 0
-        else:
-            pol = pol.squeeze(1)
-            ex = x[:, -1, :, :].flatten(start_dim=1, end_dim=-1)
-            pol[ex != 0] = 0
+        mask = x[:, -1, :, :] != 0
+        pol[mask] = 0.0
 
+        if not view:
+            pol = pol.reshape((-1, 49))
+        
         return pol, val.flatten()
 
 def predict(network, root : Node):

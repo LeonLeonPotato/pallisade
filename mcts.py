@@ -1,10 +1,11 @@
-import time
-
 import numpy as np
 import torch
+from threading import Lock
 
 from hyperparameters import *
 from utils import *
+
+diri = torch.distributions.dirichlet.Dirichlet(torch.tensor([mcts_dirichlet_val] * 7 * 7))
 
 class Node():
     def __init__(self, state, parent, turn) -> None:
@@ -19,8 +20,10 @@ class Node():
         self.state = state
         self.turn = turn # self = turn, children = -turn
         self.move = None
+        self.access = Lock()
     
     def expand(self, cache):
+        self.access.acquire()
         if self.leaf:
             # prior, value = network(self.state)
             self.leaf = False
@@ -31,7 +34,7 @@ class Node():
                 new_node.state[x, y] = new_node.turn # apply action
                 new_node.move = [x, y]
 
-                batched.append(torch.tensor(new_node.state * new_node.turn, dtype=torch.float32, device=device).unsqueeze(0))
+                batched.append(torch.tensor(new_node.state * new_node.turn, dtype=torch.float32).unsqueeze(0))
                 new_node.P = self.children_P[x, y].item()
                 self.children.append(new_node)
 
@@ -39,9 +42,11 @@ class Node():
             future = cache.submit(inp)
             child_prior, q_vals = future.result()
             for i in range(len(self.children)):
-                self.children[i].children_P = child_prior[i].softmax(dim=-1)
-                self.children[i].Q = q_vals[i].item()
-                self.backprop(self.children[i].Q)
+                child = self.children[i]
+                child.children_P = child_prior[i].reshape((49,)).softmax(dim=-1).reshape((7, 7))
+                child.Q = q_vals[i].item()
+                self.backprop(child.Q)
+        self.access.release()
 
     
     def pick_best_move(self):
@@ -50,10 +55,12 @@ class Node():
 
     def backprop(self, value):
         current = self
+        turn = -1
         while True:
             current.W += 1
-            current.Q += value * -current.turn
+            current.Q += value * turn
             current = current.parent
+            turn *= -1
             if current == None:
                 break
 
@@ -73,9 +80,9 @@ class Node():
 def prep_empty_board(network):
     board = np.zeros((7, 7), dtype=int)
     node = Node(board, None, -1)
-    with torch.inference_mode():
+    with torch.no_grad():
         priors, value = network(torch.tensor(board, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0))
-        node.children_P = priors[0].softmax(dim=-1)
+        node.children_P = priors[0].reshape((49,)).softmax(dim=-1).reshape((7, 7))
         node.Q = value[0].item()
     return node
 

@@ -18,10 +18,10 @@ if __name__ == "__main__":
     make_if_doesnt_exist("datasets")
     mp.set_start_method("spawn")
 
-    net = Network().to(device=device).share_memory()
+    net = Network().to(device=device, dtype=torch.float32).share_memory()
     net.eval()
 
-    optimizer = optim.AdamW(params=net.parameters())
+    optimizer = optim.Adam(params=net.parameters(), lr=learning_rate, weight_decay=0.5)
     criterion_p = nn.CrossEntropyLoss()
     criterion_v = nn.MSELoss()
 

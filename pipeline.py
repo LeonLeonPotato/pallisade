@@ -32,7 +32,7 @@ def run_game(network, worker_id, epoch_state, epoch_post, epoch_val):
             res = check_win(node.state)
             if res != 2:
                 break
-            print(f"Finished move {his}")
+            print(f"Worker {worker_id} finished move {his}")
 
         vals.extend([res * -((i % 2) * 2 - 1) for i in range(1, his+1)])
 
