@@ -15,7 +15,7 @@ tasks_timeout = 0.1
 
 mcts_dirichlet = 0.25
 mcts_dirichlet_val = 0.03
-mcts_cpuct_param = 2.0
+mcts_cpuct = 2.0
 mcts_searches = 49 * 2
 
 device = None
