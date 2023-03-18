@@ -38,20 +38,7 @@ cdef class Node:
         np.ndarray state
         bint leaf
         unsigned char move_x, move_y
-
-    def __init__(self, Node parent, int turn, np.ndarray state, unsigned char move_x, unsigned char move_y):
-        self.visits = 0
-        self.W = 0
-        self.P = 0.0
-        self.Q = 0.0
-        self.parent = parent
-        self.turn = turn
-        self.state = state
-        self.children = []
-        self.leaf = True
-        self.move_x = move_x
-        self.move_y = move_y
-
+        
     cdef float uct(self):
         return self.Q / (1 + self.W) + cpuct * self.P / (1 + self.visits)
 
