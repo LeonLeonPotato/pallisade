@@ -23,7 +23,7 @@ net.load_state_dict(dic['network'])
 
 board = torch.zeros(7, 7)
 
-turn = -1
+turn = 1
 with torch.inference_mode():
     while True:
         print(display(board))

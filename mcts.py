@@ -84,7 +84,7 @@ class Node():
         return str(self.state)
 
 def prep_empty_board(network):
-    board = np.zeros((7, 7), dtype=int)
+    board = np.zeros((7, 7), dtype=np.int8)
     node = Node(board, None, -1)
     with torch.no_grad():
         priors, value = network(torch.tensor(board, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0))
