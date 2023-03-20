@@ -16,7 +16,8 @@ if "mac" in platform.platform():
 import torch
 import numpy as np
 cimport numpy as np
-from libc.math cimport sqrt
+import cython
+from cython.parallel import parallel
 
 np.import_array()
 
