@@ -7,6 +7,7 @@ if "mac" in platform.platform():
 import torch.nn as nn
 import torch.optim as optim
 import torch.multiprocessing as mp
+import copy
 
 from pipeline import *
 from training import *
@@ -17,8 +18,7 @@ from utils import *
 if __name__ == "__main__":
     make_if_doesnt_exist("datasets")
     mp.set_start_method("spawn")
-
-    net = Network().to(device=device, dtype=torch.float32).share_memory()
+    net = Network().to(device=device, dtype=torch.float32)
     net.eval()
 
     optimizer = optim.Adam(params=net.parameters(), lr=learning_rate, weight_decay=0.5)
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         for w in range(workers):
             proc = mp.Process(
                 target=run_game, 
-                args=(net, w, epoch_states, epoch_post, epoch_vals)
+                args=(copy.deepcopy(net).share_memory(), w, epoch_states, epoch_post, epoch_vals)
             )
             proc.start()
             plist.append(proc)

@@ -6,7 +6,7 @@ _init = False
 epochs = 100
 epochs_per_dataset = 1
 self_play_games = 1
-batch_size = 4
+batch_size = 1
 learning_rate = 0.01
 workers = 1
 

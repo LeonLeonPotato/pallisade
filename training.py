@@ -21,6 +21,7 @@ class DataBuffer(Dataset):
         return self.states[index].to(device=device), self.mcts[index].to(device=device), self.val[index].to(device=device)
 
 def train(data, network, criterion_p, criterion_v, optimizer):
+    torch.enable_grad()
     print(" Training ".center(50, "="))
     network.train()
     for i in range(epochs_per_dataset):

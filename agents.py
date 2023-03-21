@@ -11,7 +11,7 @@ from threading import Lock, Thread
 
 # Model parameters, not really "hyperparams"
 _LAYERS = 8
-_FILTERS = 8
+_FILTERS = 1
 _HISTORY = 1
 _FLAT = 7 * 7 * _FILTERS
 
@@ -43,6 +43,7 @@ class GPUCache():
             self.append_lock.acquire()
             if self.cur_task > max_tasks or (time.time() - self.last_shipped > 0.15 and self.cur_task > 0):
                 inp = torch.cat(self.tasks).to(device=device)
+                print(list(self.model.parameters())[0])
                 out = self.model(inp)
                 cur = 0
                 for f, t in zip(self.futures, self.tasks):
@@ -54,6 +55,7 @@ class GPUCache():
                 self.tasks.clear()
                 self.cur_task = 0
                 self.last_shipped = time.time()
+                exit()
             self.append_lock.release()
 
 
@@ -121,6 +123,7 @@ class Network(nn.Module):
         val = self.value(tmp) # tmp is shape (Batch, 1)
 
         mask = x[:, -1, :, :] != 0
+        if self.training: print(mask)
         pol[mask] = 0.0
 
         if not view:

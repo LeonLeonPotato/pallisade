@@ -40,6 +40,7 @@ def unravel_index(
     return coord.flip(-1)
 
 print(model(torch.zeros((1, 1, 7, 7), device="cuda")))
+exit()
 
 def generate_data():
     state = None
