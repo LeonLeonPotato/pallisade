@@ -41,9 +41,15 @@ class Node():
             inp = torch.stack(batched)
             future = cache.submit(inp)
             child_prior, q_vals = future.result()
+            child_prior = child_prior.reshape((-1, 49))
+            child_prior[child_prior == 0] = -9999
+            noise = diri.sample((len(child_prior), )).to(device=device)
+            child_prior = (1 - mcts_dirichlet) * child_prior + mcts_dirichlet * noise
+            child_prior = child_prior.softmax(dim=-1)
+            child_prior = child_prior.reshape((-1, 7, 7))
             for i in range(len(self.children)):
                 child = self.children[i]
-                child.children_P = child_prior[i].reshape((49,)).softmax(dim=-1).reshape((7, 7))
+                child.children_P = child_prior[i]
                 child.Q = q_vals[i].item()
                 self.backprop(child.Q)
         self.access.release()
@@ -78,7 +84,7 @@ class Node():
         return str(self.state)
 
 def prep_empty_board(network):
-    board = np.zeros((7, 7), dtype=int)
+    board = np.zeros((7, 7), dtype=np.int8)
     node = Node(board, None, -1)
     with torch.no_grad():
         priors, value = network(torch.tensor(board, dtype=torch.float32, device=device).unsqueeze(0).unsqueeze(0))
@@ -91,7 +97,7 @@ def search(root:Node, cache):
     while True:
         res = check_win(root.state)
         if res != 2:
-            root.backprop(-root.turn)
+            root.backprop(-1)
             break
         root.expand(cache)
         root = root.pick_best_move()

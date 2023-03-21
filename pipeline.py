@@ -12,9 +12,7 @@ def run_game(network, worker_id, epoch_state, epoch_post, epoch_val):
     vals = []
 
     for g in range(self_play_games):
-        cur = time.time()
         node = prep_empty_board(network)
-        print("Prepare board time:", time.time() - cur)
 
         his = 0
         while True:
@@ -28,10 +26,11 @@ def run_game(network, worker_id, epoch_state, epoch_post, epoch_val):
 
             node = best
             node.parent = None
-            
+
             res = check_win(node.state)
             if res != 2:
                 break
+
             print(f"Worker {worker_id} finished move {his}")
 
         vals.extend([res * -((i % 2) * 2 - 1) for i in range(1, his+1)])
